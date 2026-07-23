@@ -1,59 +1,54 @@
 <?php
 
-mysqli_report(MYSQLI_REPORT_OFF);
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$host = "localhost";
-$user = "root";
-$password = "";
-$database = "resumeiq";
+// Read database credentials from Render Environment Variables
+$host = getenv("DB_HOST");
+$port = getenv("DB_PORT");
+$user = getenv("DB_USER");
+$password = getenv("DB_PASS");
+$database = getenv("DB_NAME");
 
-$conn = @mysqli_connect($host, $user, $password);
+// Initialize MySQL connection
+$conn = mysqli_init();
 
-if (!$conn) {
-    die("Database Connection Failed. Please start MySQL from XAMPP Control Panel.");
+// Enable SSL (required by Aiven)
+mysqli_ssl_set($conn, NULL, NULL, NULL, NULL, NULL);
+
+// Connect to MySQL
+if (!mysqli_real_connect(
+    $conn,
+    $host,
+    $user,
+    $password,
+    $database,
+    (int)$port,
+    NULL,
+    MYSQLI_CLIENT_SSL
+)) {
+    die("Database Connection Failed: " . mysqli_connect_error());
 }
 
-
-mysqli_query($conn, "CREATE DATABASE IF NOT EXISTS $database");
-mysqli_select_db($conn, $database);
-
-mysqli_query($conn, "CREATE TABLE IF NOT EXISTS user (
+// Create user table
+mysqli_query($conn, "
+CREATE TABLE IF NOT EXISTS user (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
-)");
+)
+");
 
-
-
-$oldTableExists = mysqli_query($conn, "SHOW TABLES LIKE 'ai_history'");
-if ($oldTableExists && mysqli_num_rows($oldTableExists) > 0) {
-   
-
-
-    $columnCheck = mysqli_query($conn, "SHOW COLUMNS FROM ai_history LIKE 'user_id'");
-    if ($columnCheck && mysqli_num_rows($columnCheck) == 0) {
-        mysqli_query($conn, "ALTER TABLE ai_history ADD user_id INT NULL AFTER id");
-    }
-
-$query = "INSERT IGNORE INTO ao_history (id, user_id, resume_text, ai_response, created_at)
-        SELECT id, user_id, resume_text, ai_response, created_at
-        FROM ai_history" ;
-
-    mysqli_query($conn, $query);
-
-   
-
-    mysqli_query($conn, "DROP TABLE IF EXISTS ai_history");
-}
-
-
-mysqli_query($conn, "CREATE TABLE IF NOT EXISTS ao_history (
+// Create history table
+mysqli_query($conn, "
+CREATE TABLE IF NOT EXISTS ao_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
     resume_text LONGTEXT NOT NULL,
     ai_response LONGTEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE SET NULL
+)
+");
 
 ?>
